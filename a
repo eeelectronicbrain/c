@@ -324,3 +324,6 @@ c_test.cal_array.restype = ctypes.POINTER(ctypes.c_float)
 #%%
 
 c_result=c_test.cal_array(ctypes.c_int(n_image),ctypes.c_int(n_out),ctypes.c_int(n_slide),ctypes.c_int(arr_size),x_np_cc,w_np_cc)
+
+
+gcc -shared -o arr_test_a.so arr.c
