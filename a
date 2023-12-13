@@ -1,22 +1,326 @@
-float sum_of_array(float(*arr_test)[128][8][8]) {
-    float sum = 0.0;
-
-    for (int i = 0; i < 128; ++i) {
-        for (int j = 0; j < 8; ++j) {
-            for (int k = 0; k < 8; ++k) {
-                sum += (*arr_test)[i][j][k];
-            }
-        }
-    }
-
-    return sum;
-}
-
-numpy_array = np.random.rand(128, 8, 8).astype(np.float32)
-
-# Convert the NumPy array to a C-compatible pointer
-c_array = numpy_array.ctypes.data_as(POINTER(c_void_p))
 #%%
-# Call the C function with the pointer to the array and its size
-lib.sum_of_array.restype = ctypes.c_float
-lib.sum_of_array(c_array)
+import torch
+import torch.nn as nn
+import torch.quantization as quantization
+import torch.nn.functional as F
+import torch.optim as optim
+
+import numpy as np
+import pandas as pd
+
+import torchvision
+import torchvision.datasets as datasets
+import torchvision.transforms as transforms
+import torchvision.models as models
+
+from torch.utils.data import DataLoader
+from torchviz import make_dot
+from torchinfo import summary
+from tqdm.notebook import tqdm
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+
+import copy
+
+from scipy.stats import norm
+from scipy.stats import rankdata
+import time
+import decimal
+import ctypes
+from ctypes import c_void_p, c_int, cdll, POINTER
+
+from myutils import transform, eval_func, eval_func_s, fuse_model, quant_model
+
+#%%
+
+
+# Set device (CPU or GPU)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Specify the path to the ImageNet dataset
+imagenet_path = 'C:\\NN'
+
+# Load the validation dataset using torchvision.datasets.ImageNet
+test_dataset = torchvision.datasets.ImageNet(root=imagenet_path, split='val', transform=transform)
+
+# Create a DataLoader for the validation dataset
+test_loader = DataLoader(test_dataset, batch_size=256, shuffle=False)
+test_loader_s = DataLoader(test_dataset, batch_size=256, shuffle=True)
+
+# Load MobileNet model
+mobilenet = models.mobilenet_v2(pretrained=True)
+mobilenet.to(device)
+mobilenet.eval()
+
+
+for inputs, labels in tqdm(test_loader, desc="Validation"):
+    inputs, labels = inputs.to(device), labels.to(device)
+    break
+
+#%%
+model_fused =fuse_model(mobilenet)
+model_modi=copy.deepcopy(model_fused)
+#%%
+eval_func(mobilenet, test_loader, device)
+eval_func_s(model_fused, test_loader_s, device)
+
+
+# %% mobilenet feature test
+total_correct_top1 = 0
+total_correct_top5 = 0
+total_samples = 0
+
+with torch.no_grad():
+    for inputs, labels in tqdm(test_loader_s, desc="Validation"):
+        inputs, labels = inputs.to(device), labels.to(device)
+    
+        x=mobilenet.features[0](inputs) #
+        x=mobilenet.features[1](x)
+        x=mobilenet.features[2](x)
+        x=mobilenet.features[3](x) #residual
+        x=mobilenet.features[4](x)
+        x=mobilenet.features[5](x) #residual
+        x=mobilenet.features[6](x) #residual
+        x=mobilenet.features[7](x)
+        x=mobilenet.features[8](x) #residual
+        x=mobilenet.features[9](x) #residual
+        x=mobilenet.features[10](x) #residual
+        x=mobilenet.features[11](x)
+        x=mobilenet.features[12](x) #residual
+        x=mobilenet.features[13](x) #residual
+        x=mobilenet.features[14](x)
+        x=mobilenet.features[15](x) #residual
+        x=mobilenet.features[16](x) #residual
+        x=mobilenet.features[17](x)
+        x=mobilenet.features[18](x)
+
+
+
+        x = nn.functional.adaptive_avg_pool2d(x, (1, 1))
+        x = torch.flatten(x, 1)
+        outputs = mobilenet.classifier(x)
+        
+        
+        _, predicted = torch.max(outputs, 1)
+        total_samples += labels.size(0)
+        total_correct_top1 += (predicted == labels).sum().item()
+
+        # Calculate top-5 accuracy
+        _, predicted_top5 = torch.topk(outputs, 5, dim=1)
+        total_correct_top5 += torch.sum(predicted_top5 == labels.view(-1, 1)).item()
+        #print(mobilenet(inputs))
+        #print(model_modi(inputs))
+        break
+accuracy_top1 = total_correct_top1 / total_samples
+accuracy_top5 = total_correct_top5 / total_samples
+[accuracy_top1,accuracy_top5]
+
+
+
+
+
+# %% 
+
+result=[]
+for q_n in range(5):
+    q_bit=8-q_n
+    quant_model(model_modi,model_fused,q_bit)
+
+    result=np.append(result,np.append([q_bit],eval_func_s(model_modi, test_loader_s, device)))
+    
+result_rs=np.reshape(result,(5,3))
+# %%
+np.savetxt('mobilenet_result_shuffle.csv', result_rs, delimiter=',')
+# %%
+
+# %%
+with torch.no_grad():
+    for inputs, labels in tqdm(test_loader_s, desc="Validation"):
+        inputs, labels = inputs.to(device), labels.to(device)
+        break
+inputs.shape
+
+# %% model fused test
+total_correct_top1 = 0
+total_correct_top5 = 0
+total_samples = 0
+
+with torch.no_grad():
+    for inputs, labels in tqdm(test_loader, desc="Validation"):
+        inputs, labels = inputs.to(device), labels.to(device)
+        break
+    x=model_fused.features[0](inputs) #
+    x=model_fused.features[1](x)
+    x=model_fused.features[2](x)
+    x=model_fused.features[3](x) #residual
+    
+    x=model_fused.features[4].conv[0](x)
+    x=model_fused.features[4].conv[1](x) 
+    x=model_fused.features[4].conv[2](x)
+    
+    x_a=x
+    x=model_fused.features[5].conv[0](x) #residual
+    x=model_fused.features[5].conv[1](x) #residual
+    x=model_fused.features[5].conv[2](x) #residual
+    x=x+x_a
+    
+    x_a=x
+    x=model_fused.features[6].conv[0](x) #residual
+    x=model_fused.features[6].conv[1](x) #residual
+    x=model_fused.features[6].conv[2](x) #residual
+    x=x+x_a
+    
+    x=model_fused.features[7].conv[0](x)
+    x=model_fused.features[7].conv[1](x) 
+    x=model_fused.features[7].conv[2](x) 
+    
+    x_a=x
+    x=model_fused.features[8].conv[0](x) #residual
+    x=model_fused.features[8].conv[1](x) #residual
+    x=model_fused.features[8].conv[2](x) #residual
+    x=x+x_a
+    
+    x_a=x
+    x=model_fused.features[9].conv[0](x) #residual
+    x=model_fused.features[9].conv[1](x) #residual
+    x=model_fused.features[9].conv[2](x) #residual
+    x=x+x_a
+    
+    x_a=x
+    x=model_fused.features[10].conv[0](x) #residual
+    x=model_fused.features[10].conv[1](x) #residual
+    x=model_fused.features[10].conv[2](x) #residual
+    x=x+x_a
+    
+    x=model_fused.features[11].conv[0](x)
+    x=model_fused.features[11].conv[1](x) 
+    x=model_fused.features[11].conv[2](x) 
+    
+    x_a=x
+    x=model_fused.features[12].conv[0](x) #residual
+    x=model_fused.features[12].conv[1](x) #residual
+    x=model_fused.features[12].conv[2](x) #residual
+    x=x+x_a
+    
+    x_a=x
+    x=model_fused.features[13].conv[0](x) #residual
+    x=model_fused.features[13].conv[1](x) #residual
+    x=model_fused.features[13].conv[2](x) #residual
+    x=x+x_a
+    
+    x=model_fused.features[14].conv[0](x) 
+    x=model_fused.features[14].conv[1](x) 
+    x=model_fused.features[14].conv[2](x) 
+    
+    x_a=x
+    x=model_fused.features[15].conv[0](x) #residual
+    x=model_fused.features[15].conv[1](x) #residual
+    x=model_fused.features[15].conv[2](x) #residual
+    x=x+x_a
+    
+    x_a=x
+    x_16=x.clone()
+    x=model_fused.features[16].conv[0][0](x) #residual
+    y_16=x.clone()
+    x=model_fused.features[16].conv[0][2](x) #residual
+    
+    #x=model_fused.features[16].conv[0](x) #residual
+    x=model_fused.features[16].conv[1](x) #residual
+    x=model_fused.features[16].conv[2](x) #residual
+    x=x+x_a
+    
+    
+    x=model_fused.features[17](x)
+    x=model_fused.features[18](x)
+
+
+
+    x = nn.functional.adaptive_avg_pool2d(x, (1, 1))
+    x = torch.flatten(x, 1)
+    outputs = model_fused.classifier(x)
+    
+    
+    _, predicted = torch.max(outputs, 1)
+    total_samples += labels.size(0)
+    total_correct_top1 += (predicted == labels).sum().item()
+
+    # Calculate top-5 accuracy
+    _, predicted_top5 = torch.topk(outputs, 5, dim=1)
+    total_correct_top5 += torch.sum(predicted_top5 == labels.view(-1, 1)).item()
+    #print(mobilenet(inputs))
+    #print(model_modi(inputs))
+    
+    accuracy_top1 = total_correct_top1 / total_samples
+    accuracy_top5 = total_correct_top5 / total_samples
+print([accuracy_top1,accuracy_top5])
+
+
+#%%
+model_fused.features[16].conv[0][0](x_16) - y_16
+    
+# %%
+f_layer = nn.Flatten()
+#x_16.flatten().shape
+x_flat=f_layer(x_16)
+print(x_16.shape)
+print(x_flat.shape)
+print(model_fused.features[16].conv[0][0].weight.shape)
+# %%
+n_image=x_16.shape[0]
+n_slide=x_16.shape[2]**2
+arr_size=x_16.shape[1]
+n_out=model_fused.features[16].conv[0][0].weight.shape[0]
+
+x_np=f_layer(x_16).cpu().detach().numpy()
+w_np=f_layer(model_fused.features[16].conv[0][0].weight).cpu().detach().numpy()
+b_np=(model_fused.features[16].conv[0][0].bias).cpu().detach().numpy()
+#%%
+result_aa=[]
+for i_b in range (n_image): #256
+    
+    print(i_b)
+    result_a=[]
+    for out_ch in range (n_out): #960
+        for in_n in range (n_slide): #49
+            arr_in=[]
+            for arr_n in range (arr_size): #160
+                #print(x_np[i_b][arr_n+in_n*n_slide])
+                arr_in=np.append(arr_in,x_np[i_b][in_n+arr_n*n_slide])
+                #print(in_n+arr_n*n_slide)
+            result=(arr_in*w_np[out_ch]).sum() + b_np[out_ch]
+        result_a=np.append(result_a,result)
+    result_aa=np.append(result_aa,result_a)
+    print(time.time()-start)
+#%%
+def cal_array(n_image,n_out,n_slide,arr_size,x_np,w_np):
+    result_a=[]
+    for i_b in range (n_image): #256
+        for out_ch in range (n_out): #960
+            for in_n in range (n_slide): #49
+                arr_in=[]
+                for arr_n in range (arr_size): #160
+                    arr_in=np.append(arr_in,x_np[i_b][in_n+arr_n*n_slide])
+                result=(arr_in*w_np[out_ch]).sum()
+                result_a=np.append(result_a,result)
+        
+    return result_a
+    
+            
+#%%
+model_fused.features[16].conv[0][0].bias.shape
+#%%
+x_np_c=x_np.reshape(-1)
+w_np_c=w_np.reshape(-1)
+print(x_np_c.size,w_np_c.shape)
+x_np_cc=(ctypes.c_float * x_np_c.size)(*x_np_c)
+w_np_cc=(ctypes.c_float * w_np_c.size)(*w_np_c)
+
+#%%
+c_test= ctypes.CDLL('./arr_test_a.so')
+c_test.cal_array.argtypes=[ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,
+                      ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float)]
+c_test.cal_array.restype = ctypes.POINTER(ctypes.c_float)
+#%%
+
+c_result=c_test.cal_array(ctypes.c_int(n_image),ctypes.c_int(n_out),ctypes.c_int(n_slide),ctypes.c_int(arr_size),x_np_cc,w_np_cc)
