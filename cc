@@ -5,7 +5,7 @@
 
 
 
-float Icell(float G, float V, float R_BL) {
+double Icell(double G, double V, double R_BL) {
     if (G == 0) {
         return 0;
     }
@@ -14,18 +14,18 @@ float Icell(float G, float V, float R_BL) {
     }
 }
 
-float sneak_cal_a(float* G_arr, float* V_arr, float Isb, float Vsl, float G_offset, float* G_var, float R_SL, float R_BL, int arr) {
-    float V_n = Vsl;
-    float I_sum = 0;
-    float GV_sum = 0;
-    float average_V_arr = 0;
-    float average_G_arr = 0;
+double sneak_cal_a(double* G_arr, double* V_arr, double Isb, double Vsl, double G_offset, double* G_var, double R_SL, double R_BL, int arr) {
+    double V_n = Vsl;
+    double I_sum = 0;
+    double GV_sum = 0;
+    double average_V_arr = 0;
+    double average_G_arr = 0;
 
     for (int n = 0; n < arr; n++) {
-        float G_target = G_arr[n];
-        float G_write = G_target + G_var[n];
-        float I_n;
-        float V_in = V_arr[n];
+        double G_target = G_arr[n];
+        double G_write = G_target + G_var[n];
+        double I_n;
+        double V_in = V_arr[n];
 
 
         if (G_target > 0) {
@@ -40,7 +40,7 @@ float sneak_cal_a(float* G_arr, float* V_arr, float Isb, float Vsl, float G_offs
 
         Isb = Isb - I_n;
         V_n = V_n + Isb * R_SL;
-        float GV_n = G_target * V_in;
+        double GV_n = G_target * V_in;
         I_sum = I_sum + I_n;
         GV_sum = GV_sum + GV_n;
 
@@ -59,18 +59,18 @@ float sneak_cal_a(float* G_arr, float* V_arr, float Isb, float Vsl, float G_offs
 }
 
 
-float* sneak_cal_b(float* G_arr, float* V_arr, float Isb, float Vsl, float G_offset, float* G_var, float R_SL, float R_BL, int arr) {
-    float V_n = Vsl;
-    float I_sum = 0;
-    float GV_sum = 0;
-    float average_V_arr = 0;
-    float average_G_arr = 0;
+double* sneak_cal_b(double* G_arr, double* V_arr, double Isb, double Vsl, double G_offset, double* G_var, double R_SL, double R_BL, int arr) {
+    double V_n = Vsl;
+    double I_sum = 0;
+    double GV_sum = 0;
+    double average_V_arr = 0;
+    double average_G_arr = 0;
 
     for (int n = 0; n < arr; n++) {
-        float G_target = G_arr[n];
-        float G_write = G_target + G_var[n];
-        float I_n;
-        float V_in = V_arr[n];
+        double G_target = G_arr[n];
+        double G_write = G_target + G_var[n];
+        double I_n;
+        double V_in = V_arr[n];
 
 
         if (G_target > 0) {
@@ -85,7 +85,7 @@ float* sneak_cal_b(float* G_arr, float* V_arr, float Isb, float Vsl, float G_off
 
         Isb = Isb - I_n;
         V_n = V_n + Isb * R_SL;
-        float GV_n = G_target * V_in;
+        double GV_n = G_target * V_in;
         I_sum = I_sum + I_n;
         GV_sum = GV_sum + GV_n;
 
@@ -98,7 +98,7 @@ float* sneak_cal_b(float* G_arr, float* V_arr, float Isb, float Vsl, float G_off
 
     average_V_arr /= arr;
     average_G_arr /= arr;
-    static float result[5];
+    static double result[5];
 
     result[0] = I_sum;
     result[1] = Isb;
@@ -112,15 +112,15 @@ float* sneak_cal_b(float* G_arr, float* V_arr, float Isb, float Vsl, float G_off
 }
 
 
-float* sneak_cal_Rthev(float* G_arr, float Isb, float G_offset, float* G_var, float R_SL, float R_BL, int arr) {
-    float V_n = 0;
-    float I_sum = 0;
-    float GV_sum = 0;
+double* sneak_cal_Rthev(double* G_arr, double Isb, double G_offset, double* G_var, double R_SL, double R_BL, int arr) {
+    double V_n = 0;
+    double I_sum = 0;
+    double GV_sum = 0;
 
     for (int n = 0; n < arr; n++) {
-        float G_target = G_arr[n];
-        float G_write = G_target + G_var[n];
-        float I_n;
+        double G_target = G_arr[n];
+        double G_write = G_target + G_var[n];
+        double I_n;
 
 
 
@@ -130,7 +130,7 @@ float* sneak_cal_Rthev(float* G_arr, float Isb, float G_offset, float* G_var, fl
 
         Isb = Isb - I_n;
         V_n = V_n + Isb * R_SL;
-        float GV_n = G_target * 1;
+        double GV_n = G_target * 1;
         I_sum = I_sum + I_n;
         GV_sum = GV_sum + GV_n;
 
@@ -139,7 +139,7 @@ float* sneak_cal_Rthev(float* G_arr, float Isb, float G_offset, float* G_var, fl
     // Calculate average values
 
 
-    static float result[2];
+    static double result[2];
 
     result[0] = I_sum;
     result[1] = Isb;
@@ -150,11 +150,11 @@ float* sneak_cal_Rthev(float* G_arr, float Isb, float G_offset, float* G_var, fl
 }
 
 
-float R_thev(float* G_arr, float G_offset, float* G_var, float R_SL, float R_BL, int arr) {
+double R_thev(double* G_arr, double G_offset, double* G_var, double R_SL, double R_BL, int arr) {
 
-    float I_a = sneak_cal_Rthev(G_arr, 0, G_offset, G_var, R_SL, R_BL, arr)[1];
-    float I_b = sneak_cal_Rthev(G_arr, 10, G_offset, G_var, R_SL, R_BL, arr)[1];
-    float c = 10 - I_b * (10) / (I_b - I_a);
+    double I_a = sneak_cal_Rthev(G_arr, 0, G_offset, G_var, R_SL, R_BL, arr)[1];
+    double I_b = sneak_cal_Rthev(G_arr, 10, G_offset, G_var, R_SL, R_BL, arr)[1];
+    double c = 10 - I_b * (10) / (I_b - I_a);
 
 
 
@@ -162,22 +162,22 @@ float R_thev(float* G_arr, float G_offset, float* G_var, float R_SL, float R_BL,
     return c;
 }
 
-float* thev(float* G_arr, float* V_arr, float G_offset, float* G_var, float R_SL, float R_BL, float R_ext, int arr) {
+double* thev(double* G_arr, double* V_arr, double G_offset, double* G_var, double R_SL, double R_BL, double R_ext, int arr) {
 
-    float I_sum = 0;
-    float GV_sum = 0;
-
-
-    float I_a = sneak_cal_a(G_arr, V_arr, 0, 0, G_offset, G_var, R_SL, R_BL, arr);
-    float* I_b = sneak_cal_b(G_arr, V_arr, 10, 0, G_offset, G_var, R_SL, R_BL, arr);
-    float Ithev = 10 - I_b[1] * (10) / (I_b[1] - I_a);
-
-    float Rthev = R_thev(G_arr, G_offset, G_var, R_SL, R_BL, arr);
-    float Vthev = Rthev * Ithev;
-    float Iout = Vthev / (Rthev + R_ext);
+    double I_sum = 0;
+    double GV_sum = 0;
 
 
-    static float result[7];
+    double I_a = sneak_cal_a(G_arr, V_arr, 0, 0, G_offset, G_var, R_SL, R_BL, arr);
+    double* I_b = sneak_cal_b(G_arr, V_arr, 10, 0, G_offset, G_var, R_SL, R_BL, arr);
+    double Ithev = 10 - I_b[1] * (10) / (I_b[1] - I_a);
+
+    double Rthev = R_thev(G_arr, G_offset, G_var, R_SL, R_BL, arr);
+    double Vthev = Rthev * Ithev;
+    double Iout = Vthev / (Rthev + R_ext);
+
+
+    static double result[7];
 
     result[0] = Iout;
     result[1] = Vthev;
@@ -190,8 +190,8 @@ float* thev(float* G_arr, float* V_arr, float G_offset, float* G_var, float R_SL
     return result;
 }
 
-
-void process_array(float(*arr_test)[8][8], int size1) {
+/*
+void process_array(double(*arr_test)[8][8], int size1) {
     // Your C code to process the array goes here
     // For example, print the values
     for (int i = 0; i < size1; ++i) {
@@ -204,22 +204,8 @@ void process_array(float(*arr_test)[8][8], int size1) {
     }
 }
 
-float sum_of_array(float(*arr_test)[128][8][8]) {
-    float sum = 0.0;
-
-    for (int i = 0; i < 128; ++i) {
-        for (int j = 0; j < 8; ++j) {
-            for (int k = 0; k < 8; ++k) {
-                sum += (*arr_test)[i][j][k];
-            }
-        }
-    }
-
-    return sum;
-}
-/*
-float sum_of_array_a(float***arr_test) {
-    float sum = 0.0;
+double sum_of_array(double(*arr_test)[128][8][8]) {
+    double sum = 0.0;
 
     for (int i = 0; i < 128; ++i) {
         for (int j = 0; j < 8; ++j) {
@@ -232,9 +218,23 @@ float sum_of_array_a(float***arr_test) {
     return sum;
 }
 
+double sum_of_array_a(double***arr_test) {
+    double sum = 0.0;
 
-float conv(float* G_arr, float* V_arr, float G_offset, float* G_var, float R_SL, float R_BL, float R_ext, int arr) {
-    float sum = 0.0;
+    for (int i = 0; i < 128; ++i) {
+        for (int j = 0; j < 8; ++j) {
+            for (int k = 0; k < 8; ++k) {
+                sum += (*arr_test)[i][j][k];
+            }
+        }
+    }
+
+    return sum;
+}
+
+
+double conv(double* G_arr, double* V_arr, double G_offset, double* G_var, double R_SL, double R_BL, double R_ext, int arr) {
+    double sum = 0.0;
 
     for (int i = 0; i < 128; ++i) {
         for (int j = 0; j < 8; ++j) {
@@ -247,8 +247,8 @@ float conv(float* G_arr, float* V_arr, float G_offset, float* G_var, float R_SL,
     return sum;
 }
 */
-float* cal_array(int n_image, int n_out, int n_slide, int arr_size, float* x_np, float* w_np) {
-    float* result_a = malloc(n_image * n_out * n_slide * sizeof(float));
+double* cal_array(int n_image, int n_out, int n_slide, int arr_size, double* x_np, double* w_np) {
+    double* result_a = malloc(n_image * n_out * n_slide * sizeof(double));
     int n = 0;
     if (result_a == NULL) {
         // Handle memory allocation failure
@@ -259,13 +259,13 @@ float* cal_array(int n_image, int n_out, int n_slide, int arr_size, float* x_np,
     for (int i_b = 0; i_b < n_image; i_b++) {
         for (int out_ch = 0; out_ch < n_out; out_ch++) {
             for (int in_n = 0; in_n < n_slide; in_n++) {
-                float* arr_in = malloc(arr_size * sizeof(float));
+                double* arr_in = malloc(arr_size * sizeof(double));
 
                 for (int arr_n = 0; arr_n < arr_size; arr_n++) {
                     arr_in[arr_n] = x_np[in_n + arr_n * n_slide + i_b * n_slide * arr_size];
                 }
 
-                float result = 0.0f;
+                double result = 0;
                 for (int arr_n = 0; arr_n < arr_size; arr_n++) {
                     result += arr_in[arr_n] * w_np[arr_n + out_ch * arr_size];
                 }
@@ -279,8 +279,8 @@ float* cal_array(int n_image, int n_out, int n_slide, int arr_size, float* x_np,
     return result_a;
 }
 
-float* cal_array_a(int n_image, int n_out, int n_slide, int arr_size, float* x_np, float* w_np) {
-    float* result_a = malloc(n_image * n_out * n_slide * sizeof(float));
+double* cal_array_a(int n_image, int n_out, int n_slide, int arr_size, double* x_np, double* w_np) {
+    double* result_a = malloc(n_image * n_out * n_slide * sizeof(double));
     int n = 0;
     if (result_a == NULL) {
         // Handle memory allocation failure
@@ -291,9 +291,9 @@ float* cal_array_a(int n_image, int n_out, int n_slide, int arr_size, float* x_n
     for (int i_b = 0; i_b < n_image; i_b++) {
         for (int out_ch = 0; out_ch < n_out; out_ch++) {
             for (int in_n = 0; in_n < n_slide; in_n++) {
-                float* arr_in = malloc(arr_size * sizeof(float));
-                float* G_arr= malloc(arr_size * sizeof(float));
-                float* G_var = malloc(arr_size * sizeof(float));
+                double* arr_in = malloc(arr_size * sizeof(double));
+                double* G_arr= malloc(arr_size * sizeof(double));
+                double* G_var = malloc(arr_size * sizeof(double));
 
                 for (int arr_n = 0; arr_n < arr_size; arr_n++) {
                     arr_in[arr_n] = x_np[in_n + arr_n * n_slide + i_b * n_slide * arr_size];
@@ -316,8 +316,9 @@ float* cal_array_a(int n_image, int n_out, int n_slide, int arr_size, float* x_n
     return result_a;
 }
 
-float* cal_array_b(int n_image, int n_out, int n_slide, int arr_size, float* x_np, float* w_np, float* b_np, float R_SL, float R_BL, float R_ext) {
-    float* result_a = malloc(n_image * n_out * n_slide * sizeof(float));
+
+double* cal_array_d(int n_image, int n_out, int n_slide, int arr_size, double* x_np, double* w_np, double R_SL) {
+    double* result_a = malloc(n_image * n_out * n_slide * sizeof(double));
     int n = 0;
     if (result_a == NULL) {
         // Handle memory allocation failure
@@ -328,81 +329,9 @@ float* cal_array_b(int n_image, int n_out, int n_slide, int arr_size, float* x_n
     for (int i_b = 0; i_b < n_image; i_b++) {
         for (int out_ch = 0; out_ch < n_out; out_ch++) {
             for (int in_n = 0; in_n < n_slide; in_n++) {
-                float* arr_in = malloc(arr_size * sizeof(float));
-                float* G_arr = malloc(arr_size * sizeof(float));
-                float* G_var = malloc(arr_size * sizeof(float));
-
-                for (int arr_n = 0; arr_n < arr_size; arr_n++) {
-                    arr_in[arr_n] = x_np[in_n + arr_n * n_slide + i_b * n_slide * arr_size];
-                    G_arr[arr_n] = w_np[arr_n + out_ch * arr_size];
-                    G_var[arr_n] = 0;
-
-                }
-
-                
-                result_a[n] = thev(G_arr, arr_in, 0, G_var, R_SL, R_BL, R_ext, arr_size)[0]+b_np[out_ch];
-                n = n + 1;
-                free(arr_in);
-                free(G_arr);
-                free(G_var);
-            }
-        }
-    }
-
-    return result_a;
-}
-
-float* cal_array_c(int n_image, int n_out, int n_slide, int arr_size, float* x_np, float* w_np, float* b_np, float R_SL, float R_BL, float R_ext) {
-    float* result_a = malloc(n_image * n_out * n_slide * sizeof(float));
-    int n = 0;
-    if (result_a == NULL) {
-        // Handle memory allocation failure
-        fprintf(stderr, "Memory allocation failed.\n");
-        exit(EXIT_FAILURE);
-    }
-
-    for (int i_b = 0; i_b < n_image; i_b++) {
-        for (int out_ch = 0; out_ch < n_out; out_ch++) {
-            for (int in_n = 0; in_n < n_slide; in_n++) {
-                float* arr_in = malloc(arr_size * sizeof(float));
-                float* G_arr = malloc(arr_size * sizeof(float));
-                float* G_var = malloc(arr_size * sizeof(float));
-
-                for (int arr_n = 0; arr_n < arr_size; arr_n++) {
-                    arr_in[arr_n] = x_np[in_n + arr_n * n_slide + i_b * n_slide * arr_size];
-                    G_arr[arr_n] = w_np[arr_n + out_ch * arr_size];
-                    G_var[arr_n] = 0;
-
-                }
-
-
-                result_a[n] = thev(G_arr, arr_in, 0, G_var, R_SL, R_BL, R_ext, arr_size)[0] ;
-                n = n + 1;
-                free(arr_in);
-                free(G_arr);
-                free(G_var);
-            }
-        }
-    }
-
-    return result_a;
-}
-
-float* cal_array_d(int n_image, int n_out, int n_slide, int arr_size, float* x_np, float* w_np, float R_SL) {
-    float* result_a = malloc(n_image * n_out * n_slide * sizeof(float));
-    int n = 0;
-    if (result_a == NULL) {
-        // Handle memory allocation failure
-        fprintf(stderr, "Memory allocation failed.\n");
-        exit(EXIT_FAILURE);
-    }
-
-    for (int i_b = 0; i_b < n_image; i_b++) {
-        for (int out_ch = 0; out_ch < n_out; out_ch++) {
-            for (int in_n = 0; in_n < n_slide; in_n++) {
-                float* arr_in = malloc(arr_size * sizeof(float));
-                float* G_arr = malloc(arr_size * sizeof(float));
-                float* G_var = malloc(arr_size * sizeof(float));
+                double* arr_in = malloc(arr_size * sizeof(double));
+                double* G_arr = malloc(arr_size * sizeof(double));
+                double* G_var = malloc(arr_size * sizeof(double));
 
                 for (int arr_n = 0; arr_n < arr_size; arr_n++) {
                     arr_in[arr_n] = x_np[in_n + arr_n * n_slide + i_b * n_slide * arr_size];
@@ -425,7 +354,81 @@ float* cal_array_d(int n_image, int n_out, int n_slide, int arr_size, float* x_n
     return result_a;
 }
 
-void free_array(float* arr) {
+double* cal_array_e(int n_image, int n_out, int n_slide, int arr_size, double* x_np, double* w_np, double* b_np, double R_SL) {
+    double* result_a = malloc(n_image * n_out * n_slide * sizeof(double));
+    int n = 0;
+    if (result_a == NULL) {
+        // Handle memory allocation failure
+        fprintf(stderr, "Memory allocation failed.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i_b = 0; i_b < n_image; i_b++) {
+        for (int out_ch = 0; out_ch < n_out; out_ch++) {
+            for (int in_n = 0; in_n < n_slide; in_n++) {
+                double* arr_in = malloc(arr_size * sizeof(double));
+                double* G_arr = malloc(arr_size * sizeof(double));
+                double* G_var = malloc(arr_size * sizeof(double));
+
+                for (int arr_n = 0; arr_n < arr_size; arr_n++) {
+                    arr_in[arr_n] = x_np[in_n + arr_n * n_slide + i_b * n_slide * arr_size];
+                    G_arr[arr_n] = w_np[arr_n + out_ch * arr_size];
+                    G_var[arr_n] = 0;
+
+                }
+
+
+                //result_a[n] = thev(G_arr, arr_in, 0, G_var, 0, 0, 0, arr_size)[0];
+                result_a[n] = thev(G_arr, arr_in, 0, G_var, R_SL, 0, 0, arr_size)[0] + b_np[out_ch];
+                n = n + 1;
+                free(arr_in);
+                free(G_arr);
+                free(G_var);
+            }
+        }
+    }
+
+    return result_a;
+}
+
+double* cal_array_fc(int n_image, int n_out, int n_slide, int arr_size, double* x_np, double* w_np, double* b_np, double R_SL) {
+    double* result_a = malloc(n_image * n_out * sizeof(double));
+    int n = 0;
+    if (result_a == NULL) {
+        // Handle memory allocation failure
+        fprintf(stderr, "Memory allocation failed.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i_b = 0; i_b < n_image; i_b++) {
+        for (int out_ch = 0; out_ch < n_out; out_ch++) {
+             
+            double* arr_in = malloc(arr_size * sizeof(double));
+            double* G_arr = malloc(arr_size * sizeof(double));
+            double* G_var = malloc(arr_size * sizeof(double));
+
+            for (int arr_n = 0; arr_n < arr_size; arr_n++) {
+                arr_in[arr_n] = x_np[arr_n + i_b * arr_size];
+                G_arr[arr_n] = w_np[arr_n + out_ch * arr_size];
+                G_var[arr_n] = 0;
+
+            }
+
+
+            //result_a[n] = thev(G_arr, arr_in, 0, G_var, 0, 0, 0, arr_size)[0];
+            result_a[n] = thev(G_arr, arr_in, 0, G_var, R_SL, 0, 0, arr_size)[0] + b_np[out_ch];
+            n = n + 1;
+            free(arr_in);
+            free(G_arr);
+            free(G_var);
+            
+        }
+    }
+
+    return result_a;
+}
+
+void free_array(double* arr) {
     free(arr);
 }
 
