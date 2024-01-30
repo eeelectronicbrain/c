@@ -1,0 +1,948 @@
+#%%
+import torch
+import torch.nn as nn
+import torch.quantization as quantization
+import torch.nn.functional as F
+import torch.optim as optim
+
+import numpy as np
+
+
+import torchvision
+import torchvision.datasets as datasets
+import torchvision.transforms as transforms
+import torchvision.models as models
+
+from torch.utils.data import DataLoader
+from torchviz import make_dot
+from torchinfo import summary
+from tqdm.notebook import tqdm
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+
+import copy
+import math
+
+from scipy.stats import norm
+from scipy.stats import rankdata
+import time
+import decimal
+import ctypes
+from ctypes import c_void_p, c_int, cdll, POINTER
+#%%
+from myutils import eval_loss, fit, evaluate_history, show_images_labels, torch_seed
+#%%
+# GPU 디바이스 할당
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print(device)
+#%%
+# 분류 클래스 명칭 리스트
+classes = ('plane', 'car', 'bird', 'cat',
+           'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+
+# 분류 클래스 수,　10
+n_output = len(list(set(classes)))
+
+
+#%%
+
+"""## 데이터 준비"""
+
+# Transforms의 정의
+
+transform = transforms.Compose([
+  transforms.ToTensor(),
+  transforms.Normalize(0.5, 0.5)
+])
+
+# 데이터 취득용 함수 dataset
+
+data_root = './data'
+
+train_set = datasets.CIFAR10(
+    root = data_root, train = True,
+    download = True, transform = transform)
+
+# 검증 데이터셋
+test_set = datasets.CIFAR10(
+    root = data_root, train = False,
+    download = True, transform = transform)
+
+# 미니 배치 사이즈 지정
+batch_size = 100
+
+# 훈련용 데이터로더
+# 훈련용이므로 셔플을 True로 설정
+train_loader = DataLoader(train_set,
+    batch_size = batch_size, shuffle = True)
+
+# 검증용 데이터로더
+# 검증용이므로 셔플하지 않음
+test_loader = DataLoader(test_set,
+    batch_size = batch_size, shuffle = False)
+
+# 처음 50개 이미지 출력
+show_images_labels(test_loader, classes, None, None)
+#%%
+
+
+class CNN_v4(nn.Module):
+    def __init__(self, num_classes):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 32, 3, padding=(1,1),bias=False)
+        self.conv2 = nn.Conv2d(32, 32, 3, padding=(1,1),bias=False)
+        self.conv3 = nn.Conv2d(32, 64, 3, padding=(1,1),bias=False)
+        self.conv4 = nn.Conv2d(64, 64, 3, padding=(1,1),bias=False)
+        self.conv5 = nn.Conv2d(64, 128, 3, padding=(1,1),bias=False)
+        self.conv6 = nn.Conv2d(128, 128, 3, padding=(1,1),bias=False)
+        self.relu = nn.ReLU(inplace=True)
+        self.flatten = nn.Flatten()
+        self.maxpool = nn.MaxPool2d((2,2))
+        self.l1 = nn.Linear(4*4*128, 128)
+        self.l2 = nn.Linear(128, 10)
+        self.dropout1 = nn.Dropout(0.2)
+        self.dropout2 = nn.Dropout(0.3)
+        self.dropout3 = nn.Dropout(0.4)
+        self.bn1 = nn.BatchNorm2d(32)
+        self.bn2 = nn.BatchNorm2d(32)
+        self.bn3 = nn.BatchNorm2d(64)
+        self.bn4 = nn.BatchNorm2d(64)
+        self.bn5 = nn.BatchNorm2d(128)
+        self.bn6 = nn.BatchNorm2d(128)
+
+        self.features = nn.Sequential(
+            self.conv1,
+            self.bn1,
+            self.relu,
+            self.conv2,
+            self.bn2,
+            self.relu,
+            self.maxpool,
+            self.dropout1,
+            self.conv3,
+            self.bn3,
+            self.relu,
+            self.conv4,
+            self.bn4,
+            self.relu,
+            self.maxpool,
+            self.dropout2,
+            self.conv5,
+            self.bn5,
+            self.relu,
+            self.conv6,
+            self.bn6,
+            self.relu,
+            self.maxpool,
+            self.dropout3,
+            )
+
+        self.classifier = nn.Sequential(
+            self.l1,
+            self.relu,
+            self.dropout3,
+            self.l2
+        )
+
+    def forward(self, x):
+        x1 = self.features(x)
+        x2 = self.flatten(x1)
+        x3 = self.classifier(x2)
+        return x3
+#%%
+# 난수 고정
+torch_seed()
+
+# 모델 인스턴스 생성
+net = CNN_v4(n_output).to(device)
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(net.parameters())
+history = np.zeros((0, 5))
+#%%
+# 학습
+
+#num_epochs = 30
+#history = fit(net, optimizer, criterion, num_epochs, train_loader, test_loader, device, history)
+#%%
+evaluate_history(history)
+#%%
+
+model = net  # Your trained model
+#torch.save(model, 'model_trained.pt')
+
+#%%
+
+summary(net,(100,3,32,32))
+#%%
+summary(net)
+# %%
+for images, labels in test_loader:
+    break
+
+
+images.shape
+# %%
+#%%print(model)
+
+# %%
+model_load=torch.load( 'model_trained.pt')
+F_layer=nn.Flatten()
+
+model_load.eval()
+train_loss = 0
+train_acc = 0
+val_loss = 0
+val_acc = 0
+count = 0
+batch_size=256
+test_loader = DataLoader(test_set, batch_size = batch_size, shuffle = False)
+#%%
+for inputs, labels in test_loader:
+    
+    count += len(labels)
+    inputs = inputs.to(device)
+    labels = labels.to(device)
+
+    # 예측 계산
+            
+    x=model_load.conv1(inputs)
+    x=model_load.bn1(x)
+    x=model_load.relu(x)
+
+    x2=x.clone()
+    x=model_load.conv2(x)
+    y2=x.clone()
+    x=model_load.bn2(x)
+    x=model_load.relu(x)
+
+    x=model_load.maxpool(x)
+    
+    x=model_load.conv3(x)
+    x=model_load.bn3(x)
+    x=model_load.relu(x)
+
+    x=model_load.conv4(x)
+    x=model_load.bn4(x)
+    x=model_load.relu(x)
+
+    x=model_load.maxpool(x)
+    
+    x6=x.clone()
+    x=model_load.conv5(x)
+    y6=x.clone()
+
+    x=model_load.bn5(x)
+    x=model_load.relu(x)
+
+    
+    x=model_load.conv6(x)
+    '''
+    #####################################
+    o_6=[]
+    fw6=F_layer(model_load.conv6.weight)
+    np_fw6=fw6.cpu().detach().numpy()
+    
+    i6 = F.pad(x6, (1, 1, 1, 1), "constant", 0)
+    np_i6=i6.cpu().detach().numpy()
+    for i_ch_n in range (np_i6.shape[0]):
+        print(i_ch_n)
+        o_6a=[]
+        for o_ch_n in range (np_fw6.shape[0]):
+            for y_n in range(x6.shape[3]):
+                for x_n in range(x6.shape[3]):
+                    out=np.sum(np_i6[i_ch_n][:, y_n:y_n+3, x_n:x_n+3].reshape(-1)*np_fw6[o_ch_n])
+                    o_6a=np.append(o_6a,out)
+        o_6=np.append(o_6,o_6a)
+    
+    x=torch.tensor(o_6.reshape((100,128,8,8)),dtype=torch.float32).to(device)
+    #####################################
+    '''
+    
+    x=model_load.bn6(x)
+    x=model_load.relu(x)
+
+    x=model_load.maxpool(x)
+    
+    x=model_load.flatten(x)
+
+    x=model_load.l1(x)
+    x=model_load.relu(x)
+    
+    outputs=model_load.l2(x)
+
+
+
+
+
+    # 손실 계산
+    loss = criterion(outputs, labels)
+    val_loss += loss.item()
+
+    # 예측 라벨 산출
+    predicted = torch.max(outputs, 1)[1]
+
+    # 정답 건수 산출
+    val_acc += (predicted == labels).sum().item()
+
+    # 손실과 정확도 계산
+    avg_val_loss = val_loss / count
+    avg_val_acc = val_acc / count
+    
+    
+
+print(avg_val_acc)
+
+# %%
+x6=x6*0+0.1
+
+# %%
+x6[0][0].shape
+# %%
+F_layer=nn.Flatten()
+model_load.conv5.weight=torch.nn.Parameter (model_load.conv5.weight*0+0.1)
+fw6=F_layer(model_load.conv5.weight)
+np_fw6=fw6.cpu().detach().numpy()
+
+# %%
+
+i6 = F.pad(x6, (1, 1, 1, 1), "constant", 0)
+i6[0].shape
+np_i6=i6.cpu().detach().numpy()
+np_i6
+# %%
+np_i6[0][:, 0:3, 0:3].reshape(-1)*np_fw6[0]
+#%%
+np.sum(np_i6[0][:, 1:4, 1:4].reshape(-1)*np_fw6[0]).dtype
+# %%
+F_layer(i6[0][:, :3, :3]).shape
+# %%
+#model_load.conv6.weight=torch.nn.Parameter (model_load.conv6.weight*0+1)
+yy6=model_load.conv5(x6)
+yy6
+
+# %%
+o_6=[]
+for i_ch_n in range (np_i6.shape[0]):
+    print(i_ch_n)
+    o_6a=[]
+    for o_ch_n in range (np_fw6.shape[0]):
+        for y_n in range(x6.shape[3]):
+            for x_n in range(x6.shape[3]):
+                out=np.sum(np_i6[i_ch_n][:, y_n:y_n+3, x_n:x_n+3].reshape(-1)*np_fw6[o_ch_n])
+                o_6a=np.append(o_6a,out)
+    o_6=np.append(o_6,o_6a)
+o_6
+# %%
+o_6
+# %%
+np.mean(np.abs(1-yy6.cpu().detach().numpy()/o_6.reshape((100,128,8,8))))
+# %%
+np.sum(np_i6[0][:, 0:0+3, 0:0+3].reshape(-1)*np_fw6[0])
+
+# %%
+yy6[0][0]
+# %%
+n=64
+conv_test = nn.Conv2d(n, 128, 3, padding=(1,1),bias=False,dtype=torch.float64)
+conv_test = nn.Conv2d(n, 128, 3, padding=(1,1),bias=False)
+conv_test.weight=torch.nn.Parameter (conv_test.weight*0+0.1)
+conv_test.to(torch.device("cpu"))
+conv_test.to(torch.device("cuda:0"))
+conv_test.weight.dtype
+
+dummy=torch.randn(10,n,8,8).to(torch.float64)
+dummy=torch.randn(10,n,8,8)
+
+dummy=dummy.to(torch.device("cpu"))
+dummy=dummy.to(torch.device("cuda:0"))
+dummy.dtype
+
+
+conv_test(dummy)
+# %%
+d_rs=dummy.reshape(-1)
+d_rs.shape
+# %%
+i_ch=dummy.shape[1]
+i_ln=dummy.shape[2]
+n_image=dummy.shape[0]
+i_arr=np.zeros((i_ch*9))
+for nn_image in range (n_image):
+    for i_ch_n in range (i_ch):
+
+        i_arr[0+i_ch_n*9]=d_rs[0+i_ln*0+i_ch_n*i_ln*i_ln+nn_image*i_ch_n*i_ln*i_ln]
+        i_arr[1+i_ch_n*9]=d_rs[1+i_ln*0+i_ch_n*i_ln*i_ln+nn_image*i_ch_n*i_ln*i_ln]
+        i_arr[2+i_ch_n*9]=d_rs[2+i_ln*0+i_ch_n*i_ln*i_ln+nn_image*i_ch_n*i_ln*i_ln]
+        i_arr[3+i_ch_n*9]=d_rs[0+i_ln*1+i_ch_n*i_ln*i_ln+nn_image*i_ch_n*i_ln*i_ln]
+        i_arr[4+i_ch_n*9]=d_rs[1+i_ln*1+i_ch_n*i_ln*i_ln+nn_image*i_ch_n*i_ln*i_ln]
+        i_arr[5+i_ch_n*9]=d_rs[2+i_ln*1+i_ch_n*i_ln*i_ln+nn_image*i_ch_n*i_ln*i_ln]
+        i_arr[6+i_ch_n*9]=d_rs[0+i_ln*2+i_ch_n*i_ln*i_ln+nn_image*i_ch_n*i_ln*i_ln]
+        i_arr[7+i_ch_n*9]=d_rs[1+i_ln*2+i_ch_n*i_ln*i_ln+nn_image*i_ch_n*i_ln*i_ln]
+        i_arr[8+i_ch_n*9]=d_rs[2+i_ln*2+i_ch_n*i_ln*i_ln+nn_image*i_ch_n*i_ln*i_ln]
+# %%
+nn_image=1
+for nn_image in range (n_image):
+    for i_ch_n in range (i_ch):
+
+        i_arr[0+i_ch_n*9]=d_rs[0+i_ln*0+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+        i_arr[1+i_ch_n*9]=d_rs[1+i_ln*0+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+        i_arr[2+i_ch_n*9]=d_rs[2+i_ln*0+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+        i_arr[3+i_ch_n*9]=d_rs[0+i_ln*1+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+        i_arr[4+i_ch_n*9]=d_rs[1+i_ln*1+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+        i_arr[5+i_ch_n*9]=d_rs[2+i_ln*1+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+        i_arr[6+i_ch_n*9]=d_rs[0+i_ln*2+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+        i_arr[7+i_ch_n*9]=d_rs[1+i_ln*2+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+        i_arr[8+i_ch_n*9]=d_rs[2+i_ln*2+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+i_arr
+# %%
+nn_image=1
+for nn_image in range (n_image):
+    for n_slide in range (i_ln-2):
+        for i_ch_n in range (i_ch):
+            i_arr[0+i_ch_n*9]=d_rs[0+n_slide*i_ln+i_ln*0+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+            i_arr[1+i_ch_n*9]=d_rs[1+n_slide*i_ln+i_ln*0+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+            i_arr[2+i_ch_n*9]=d_rs[2+n_slide*i_ln+i_ln*0+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+            i_arr[3+i_ch_n*9]=d_rs[0+n_slide*i_ln+i_ln*1+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+            i_arr[4+i_ch_n*9]=d_rs[1+n_slide*i_ln+i_ln*1+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+            i_arr[5+i_ch_n*9]=d_rs[2+n_slide*i_ln+i_ln*1+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+            i_arr[6+i_ch_n*9]=d_rs[0+n_slide*i_ln+i_ln*2+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+            i_arr[7+i_ch_n*9]=d_rs[1+n_slide*i_ln+i_ln*2+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+            i_arr[8+i_ch_n*9]=d_rs[2+n_slide*i_ln+i_ln*2+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+    i_arr
+# %%
+for n_slide in range (36):
+    nn_slide=(n_slide//(i_ln-2))*(i_ln)+n_slide%(i_ln-2)
+#%%
+nn_image=3
+n_slide=35
+for nn_image in range (n_image):
+    for n_slide in range (i_ln-2):
+        nn_slide=(n_slide//(i_ln-2))*(i_ln)+n_slide%(i_ln-2)
+        for i_ch_n in range (i_ch):
+            i_arr[0+i_ch_n*9]=d_rs[0+nn_slide+i_ln*0+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+            i_arr[1+i_ch_n*9]=d_rs[1+nn_slide+i_ln*0+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+            i_arr[2+i_ch_n*9]=d_rs[2+nn_slide+i_ln*0+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+            i_arr[3+i_ch_n*9]=d_rs[0+nn_slide+i_ln*1+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+            i_arr[4+i_ch_n*9]=d_rs[1+nn_slide+i_ln*1+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+            i_arr[5+i_ch_n*9]=d_rs[2+nn_slide+i_ln*1+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+            i_arr[6+i_ch_n*9]=d_rs[0+nn_slide+i_ln*2+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+            i_arr[7+i_ch_n*9]=d_rs[1+nn_slide+i_ln*2+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+            i_arr[8+i_ch_n*9]=d_rs[2+nn_slide+i_ln*2+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+i_arr
+#%%
+
+x_n=5
+y_n=5
+dummy[nn_image][:, y_n:y_n+3, x_n:x_n+3].reshape(-1).cpu().detach().numpy()-i_arr
+# %%
+i_ch_n*i_ln*i_ln/64
+# %%
+
+# %%
+for n_slide in range (36):
+    nn_slide=(n_slide//(i_ln-2))*(i_ln)+n_slide%(i_ln-2)
+    print(n_slide,nn_slide)
+
+# %%
+for n_slide in range (36):
+    nn_slide=(n_slide//(i_ln-2))
+    print(n_slide,nn_slide)
+# %%
+c_test= ctypes.CDLL('./conv_test_c.so')
+#%%
+c_test.conv_a.argtypes=[
+    ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,
+    ctypes.POINTER(ctypes.c_double),ctypes.POINTER(ctypes.c_double),ctypes.POINTER(ctypes.c_double),
+    ctypes.c_double,ctypes.c_double]
+c_test.conv_a.restype = ctypes.POINTER(ctypes.c_double)
+
+
+c_test.conv_input.argtypes=[
+    ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,
+    ctypes.POINTER(ctypes.c_double)]
+c_test.conv_input.restype = ctypes.POINTER(ctypes.c_double)
+# %%
+n=16
+
+conv_test = nn.Conv2d(n, 10, 3, padding=(1,1),bias=False)
+conv_test.weight=torch.nn.Parameter (conv_test.weight)
+conv_test.to(torch.device("cpu"))
+conv_test.to(torch.device("cuda:0"))
+conv_test.weight.dtype
+
+
+#dummy=torch.randn(10,n,8,8).to(torch.float64)
+dummy=torch.randn(10,n,3,3)
+
+dummy=dummy.to(torch.device("cpu"))
+dummy=dummy.to(torch.device("cuda:0"))
+dummy.dtype
+
+
+conv_test(dummy)
+# %%
+
+#%%
+conv_test.weight.shape
+
+#%%
+R_SL=0
+R_ext=0
+x_pad= torch.nn.functional.pad(dummy, (1,1,1,1), 'constant', 0)
+x_np=x_pad.reshape(-1).cpu().detach().numpy()
+w_np=conv_test.weight.reshape(-1).cpu().detach().numpy()
+wv_np=w_np*0
+
+x_np=(ctypes.c_double * x_np.size)(*x_np)
+w_np=(ctypes.c_double * w_np.size)(*w_np)
+wv_np=(ctypes.c_double * wv_np.size)(*wv_np)
+
+n_image=dummy.shape[0]
+n_out=conv_test.weight.shape[0]
+i_ln=x_pad.shape[2]
+i_ch=x_pad.shape[1]
+arr_size=9*i_ch
+
+c_x=c_test.conv_a(ctypes.c_int(n_image), ctypes.c_int(n_out), ctypes.c_int(i_ln), ctypes.c_int(i_ch), ctypes.c_int(arr_size),
+                   x_np,w_np, wv_np, ctypes.c_double(R_SL), ctypes.c_double(R_ext) )
+
+np_c_x = np.ctypeslib.as_array(c_x, shape=(n_image*n_out*(i_ln-2)*(i_ln-2),))
+
+#np_c_x = np.ctypeslib.as_array(c_x, shape=(n_image*n_out*n_slide,))
+np_c_x=np.reshape(np_c_x, (n_image,n_out,(i_ln-2),(i_ln-2)))
+np_c_x
+#%%
+conv_test(dummy).cpu().detach().numpy()-np_c_x
+#%%
+#n_image*n_out*(i_ln-2)*(i_ln-2)
+conv_test(dummy).reshape(-1).shape
+#conv_test.weight.shape
+#%%
+dummy=torch.randn(10,n,3,3)*0+1
+d_rs=dummy.reshape(-1).cpu().detach().numpy()
+nn_slide=0
+for i_ch_n in range (i_ch):
+    i_arr[0+i_ch_n*9]=d_rs[0+nn_slide+i_ln*0+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+    i_arr[1+i_ch_n*9]=d_rs[1+nn_slide+i_ln*0+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+    i_arr[2+i_ch_n*9]=d_rs[2+nn_slide+i_ln*0+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+    i_arr[3+i_ch_n*9]=d_rs[0+nn_slide+i_ln*1+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+    i_arr[4+i_ch_n*9]=d_rs[1+nn_slide+i_ln*1+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+    i_arr[5+i_ch_n*9]=d_rs[2+nn_slide+i_ln*1+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+    i_arr[6+i_ch_n*9]=d_rs[0+nn_slide+i_ln*2+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+    i_arr[7+i_ch_n*9]=d_rs[1+nn_slide+i_ln*2+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+    i_arr[8+i_ch_n*9]=d_rs[2+nn_slide+i_ln*2+i_ch_n*i_ln*i_ln+nn_image*i_ch*i_ln*i_ln]
+i_arr
+# %%
+d_rs
+# %%
+model_load=torch.load( 'model_trained.pt')
+F_layer=nn.Flatten()
+test_loader = DataLoader(test_set, batch_size = batch_size, shuffle = False)
+
+#%%
+c_test= ctypes.CDLL('./conv_test_c.so')
+
+c_test.conv_a.argtypes=[
+    ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,
+    ctypes.POINTER(ctypes.c_double),ctypes.POINTER(ctypes.c_double),ctypes.POINTER(ctypes.c_double),
+    ctypes.c_double,ctypes.c_double]
+c_test.conv_a.restype = ctypes.POINTER(ctypes.c_double)
+
+#%%
+
+model_load.eval()
+#%%
+train_loss = 0
+train_acc = 0
+val_loss = 0
+val_acc = 0
+count = 0
+batch_size=25
+test_loader = DataLoader(test_set, batch_size = batch_size, shuffle = False)
+################################
+R_SL=0
+R_ext=0
+
+#######################
+for inputs, labels in test_loader:
+    
+    count += len(labels)
+    inputs = inputs.to(device)
+    labels = labels.to(device)
+
+    # 예측 계산
+            
+    x=model_load.conv1(inputs)
+    x=model_load.bn1(x)
+    x=model_load.relu(x)
+
+    
+    x=model_load.conv2(x)
+    
+    x=model_load.bn2(x)
+    x=model_load.relu(x)
+
+    x=model_load.maxpool(x)
+    
+    x_in=x.clone()
+    #######################################################
+    x=model_load.conv3(x)
+    '''
+    x_pad= torch.nn.functional.pad(x_in, (1,1,1,1), 'constant', 0)
+    x_np=x_pad.reshape(-1).cpu().detach().numpy()
+    w_np=model_load.conv3.weight.reshape(-1).cpu().detach().numpy()
+    wv_np=w_np*0
+    x_np=(ctypes.c_double * x_np.size)(*x_np)
+    w_np=(ctypes.c_double * w_np.size)(*w_np)
+    wv_np=(ctypes.c_double * wv_np.size)(*wv_np)
+    n_image=x_in.shape[0]
+    n_out=model_load.conv3.weight.shape[0]
+    i_ln=x_pad.shape[2]
+    i_ch=x_pad.shape[1]
+    arr_size=9*i_ch
+    c_x=c_test.conv_a(ctypes.c_int(n_image), ctypes.c_int(n_out), ctypes.c_int(i_ln), ctypes.c_int(i_ch), ctypes.c_int(arr_size),
+                    x_np,w_np, wv_np, ctypes.c_double(R_SL), ctypes.c_double(R_ext) )
+    np_c_x = np.ctypeslib.as_array(c_x, shape=(n_image*n_out*(i_ln-2)*(i_ln-2),))
+    np_c_x=np.reshape(np_c_x, (n_image,n_out,(i_ln-2),(i_ln-2)))
+    x=torch.tensor(np_c_x,dtype=torch.float32,device=device)
+    '''
+    #######################################################
+    y=x.clone()
+    x=model_load.bn3(x)
+    x=model_load.relu(x)
+
+    x=model_load.conv4(x)
+    x=model_load.bn4(x)
+    x=model_load.relu(x)
+
+    x=model_load.maxpool(x)
+    
+    
+    x=model_load.conv5(x)
+    
+
+    x=model_load.bn5(x)
+    x=model_load.relu(x)
+
+    
+    x=model_load.conv6(x)
+ 
+    x=model_load.bn6(x)
+    x=model_load.relu(x)
+
+    x=model_load.maxpool(x)
+    
+    x=model_load.flatten(x)
+
+    x=model_load.l1(x)
+    x=model_load.relu(x)
+    
+    outputs=model_load.l2(x)
+
+    # 손실 계산
+    loss = criterion(outputs, labels)
+    val_loss += loss.item()
+
+    # 예측 라벨 산출
+    predicted = torch.max(outputs, 1)[1]
+
+    # 정답 건수 산출
+    val_acc += (predicted == labels).sum().item()
+
+    # 손실과 정확도 계산
+    avg_val_loss = val_loss / count
+    avg_val_acc = val_acc / count
+    
+    break
+    
+print(avg_val_acc)
+# %%
+R_SL=0
+R_ext=0
+x_pad= torch.nn.functional.pad(x_in, (1,1,1,1), 'constant', 0)
+x_np=x_pad.reshape(-1).cpu().detach().numpy()
+w_np=model_load.conv3.weight.reshape(-1).cpu().detach().numpy()
+wv_np=w_np*0
+
+x_np=(ctypes.c_double * x_np.size)(*x_np)
+w_np=(ctypes.c_double * w_np.size)(*w_np)
+wv_np=(ctypes.c_double * wv_np.size)(*wv_np)
+
+n_image=x_in.shape[0]
+n_out=model_load.conv3.weight.shape[0]
+i_ln=x_pad.shape[2]
+i_ch=x_pad.shape[1]
+arr_size=9*i_ch
+
+c_x=c_test.conv_a(ctypes.c_int(n_image), ctypes.c_int(n_out), ctypes.c_int(i_ln), ctypes.c_int(i_ch), ctypes.c_int(arr_size),
+                   x_np,w_np, wv_np, ctypes.c_double(R_SL), ctypes.c_double(R_ext) )
+
+np_c_x = np.ctypeslib.as_array(c_x, shape=(n_image*n_out*(i_ln-2)*(i_ln-2),))
+
+#np_c_x = np.ctypeslib.as_array(c_x, shape=(n_image*n_out*n_slide,))
+np_c_x=np.reshape(np_c_x, (n_image,n_out,(i_ln-2),(i_ln-2)))
+np_c_x
+
+# %%
+abs(1-(y.cpu().detach().numpy()-np_c_x)/y.cpu().detach().numpy())
+# %%
+np_c_x
+
+# %%
+y.shape
+# %%
+def conv3_arr(x_in,R_SL,R_ext):
+    x_pad= torch.nn.functional.pad(x_in, (1,1,1,1), 'constant', 0)
+    x_np=x_pad.reshape(-1).cpu().detach().numpy()
+    w_np=model_load.conv3.weight.reshape(-1).cpu().detach().numpy()
+    wv_np=w_np*0
+    x_np_c=(ctypes.c_double * x_np.size)(*x_np)
+    w_np_c=(ctypes.c_double * w_np.size)(*w_np)
+    wv_np_c=(ctypes.c_double * wv_np.size)(*wv_np)
+    n_image=x_in.shape[0]
+    n_out=model_load.conv3.weight.shape[0]
+    i_ln=x_pad.shape[2]
+    i_ch=x_pad.shape[1]
+    arr_size=9*i_ch
+    c_x=c_test.conv_a(ctypes.c_int(n_image), ctypes.c_int(n_out), ctypes.c_int(i_ln), ctypes.c_int(i_ch), ctypes.c_int(arr_size),
+                    x_np_c,w_np_c, wv_np_c, ctypes.c_double(R_SL), ctypes.c_double(R_ext) )
+    np_c_x = np.ctypeslib.as_array(c_x, shape=(n_image*n_out*(i_ln-2)*(i_ln-2),))
+    np_c_x=np.reshape(np_c_x, (n_image,n_out,(i_ln-2),(i_ln-2)))
+    x=torch.tensor(np_c_x,dtype=torch.float32,device=device)
+    return x
+# %%
+conv3_arr(x_in,0,0)
+# %%
+w_np=model_load.conv3.weight.reshape(-1).cpu().detach().numpy()
+# %%
+q_level=255
+q_max=np.max(abs(w_np)).item()
+wq=np.round(w_np/q_max*255)
+#%%
+wq_p=wq.copy()
+wq_n=wq.copy()
+wq_p[wq_p<0]=0
+wq_n[wq_n>0]=0
+wq_n=np.abs(wq_n)
+wq_p0=np.divmod(wq_p, 16)[1]
+wq_p1=np.divmod(wq_p, 16)[0]
+wq_n0=np.divmod(wq_n, 16)[1]
+wq_n1=np.divmod(wq_n, 16)[0]
+
+
+# %%
+def conv_arr_q(x_in,R_SL,R_ext,w_np,n_out):
+    x_pad= torch.nn.functional.pad(x_in, (1,1,1,1), 'constant', 0)
+    x_np=x_pad.reshape(-1).cpu().detach().numpy()
+    wv_np=w_np*10*np.random.normal(0, 1, w_np.size)
+    x_np_c=(ctypes.c_double * x_np.size)(*x_np)
+    w_np_c=(ctypes.c_double * w_np.size)(*w_np)
+    wv_np_c=(ctypes.c_double * wv_np.size)(*wv_np)
+    n_image=x_in.shape[0]
+    i_ln=x_pad.shape[2]
+    i_ch=x_pad.shape[1]
+    arr_size=9*i_ch
+    c_x=c_test.conv_a(ctypes.c_int(n_image), ctypes.c_int(n_out), ctypes.c_int(i_ln), ctypes.c_int(i_ch), ctypes.c_int(arr_size),
+                    x_np_c,w_np_c, wv_np_c, ctypes.c_double(R_SL), ctypes.c_double(R_ext) )
+    np_c_x = np.ctypeslib.as_array(c_x, shape=(n_image*n_out*(i_ln-2)*(i_ln-2),))
+    np_c_x=np.reshape(np_c_x, (n_image,n_out,(i_ln-2),(i_ln-2)))
+    x=torch.tensor(np_c_x,dtype=torch.float32,device=device)
+    return x
+# %%
+def conv3_arr_sum(x_in,R_SL,R_ext):
+    q_level=255
+    
+    w_np=model_load.conv3.weight.reshape(-1).cpu().detach().numpy()
+    n_out=model_load.conv3.weight.shape[0]
+    q_max=np.max(abs(w_np)).item()
+    wq=np.round(w_np/q_max*255)
+    wq_p=wq.copy()
+    wq_n=wq.copy()
+    wq_p[wq_p<0]=0
+    wq_n[wq_n>0]=0
+    wq_n=np.abs(wq_n)
+    wq_p0=np.divmod(wq_p, 16)[1]/15*75*1e-9
+    wq_p1=np.divmod(wq_p, 16)[0]/15*75*1e-9
+    wq_n0=np.divmod(wq_n, 16)[1]/15*75*1e-9
+    wq_n1=np.divmod(wq_n, 16)[0]/15*75*1e-9
+
+    y_p0=conv_arr_q(x_in,R_SL,R_ext,wq_p0,n_out)
+    y_p1=conv_arr_q(x_in,R_SL,R_ext,wq_p1,n_out)
+    y_n0=conv_arr_q(x_in,R_SL,R_ext,wq_n0,n_out)
+    y_n1=conv_arr_q(x_in,R_SL,R_ext,wq_n1,n_out)
+    y=(y_p0+y_p1*16-(y_n0+y_n1*16))*15/75*1e9/255*q_max
+    return y
+def conv4_arr_sum(x_in,R_SL,R_ext):
+    q_level=255
+    
+    w_np=model_load.conv4.weight.reshape(-1).cpu().detach().numpy()
+    n_out=model_load.conv4.weight.shape[0]
+    q_max=np.max(abs(w_np)).item()
+    wq=np.round(w_np/q_max*255)
+    wq_p=wq.copy()
+    wq_n=wq.copy()
+    wq_p[wq_p<0]=0
+    wq_n[wq_n>0]=0
+    wq_n=np.abs(wq_n)
+    wq_p0=np.divmod(wq_p, 16)[1]/15*75*1e-9
+    wq_p1=np.divmod(wq_p, 16)[0]/15*75*1e-9
+    wq_n0=np.divmod(wq_n, 16)[1]/15*75*1e-9
+    wq_n1=np.divmod(wq_n, 16)[0]/15*75*1e-9
+
+    y_p0=conv_arr_q(x_in,R_SL,R_ext,wq_p0,n_out)
+    y_p1=conv_arr_q(x_in,R_SL,R_ext,wq_p1,n_out)
+    y_n0=conv_arr_q(x_in,R_SL,R_ext,wq_n0,n_out)
+    y_n1=conv_arr_q(x_in,R_SL,R_ext,wq_n1,n_out)
+    y=(y_p0+y_p1*16-(y_n0+y_n1*16))*15/75*1e9/255*q_max
+    return y
+
+def conv5_arr_sum(x_in,R_SL,R_ext):
+    q_level=255
+    
+    w_np=model_load.conv5.weight.reshape(-1).cpu().detach().numpy()
+    n_out=model_load.conv5.weight.shape[0]
+    q_max=np.max(abs(w_np)).item()
+    wq=np.round(w_np/q_max*255)
+    wq_p=wq.copy()
+    wq_n=wq.copy()
+    wq_p[wq_p<0]=0
+    wq_n[wq_n>0]=0
+    wq_n=np.abs(wq_n)
+    wq_p0=np.divmod(wq_p, 16)[1]/15*75*1e-9
+    wq_p1=np.divmod(wq_p, 16)[0]/15*75*1e-9
+    wq_n0=np.divmod(wq_n, 16)[1]/15*75*1e-9
+    wq_n1=np.divmod(wq_n, 16)[0]/15*75*1e-9
+
+    y_p0=conv_arr_q(x_in,R_SL,R_ext,wq_p0,n_out)
+    y_p1=conv_arr_q(x_in,R_SL,R_ext,wq_p1,n_out)
+    y_n0=conv_arr_q(x_in,R_SL,R_ext,wq_n0,n_out)
+    y_n1=conv_arr_q(x_in,R_SL,R_ext,wq_n1,n_out)
+    y=(y_p0+y_p1*16-(y_n0+y_n1*16))*15/75*1e9/255*q_max
+    return y
+
+def conv6_arr_sum(x_in,R_SL,R_ext):
+    q_level=255
+    
+    w_np=model_load.conv6.weight.reshape(-1).cpu().detach().numpy()
+    n_out=model_load.conv6.weight.shape[0]
+    q_max=np.max(abs(w_np)).item()
+    wq=np.round(w_np/q_max*255)
+    wq_p=wq.copy()
+    wq_n=wq.copy()
+    wq_p[wq_p<0]=0
+    wq_n[wq_n>0]=0
+    wq_n=np.abs(wq_n)
+    wq_p0=np.divmod(wq_p, 16)[1]/15*75*1e-9
+    wq_p1=np.divmod(wq_p, 16)[0]/15*75*1e-9
+    wq_n0=np.divmod(wq_n, 16)[1]/15*75*1e-9
+    wq_n1=np.divmod(wq_n, 16)[0]/15*75*1e-9
+
+    y_p0=conv_arr_q(x_in,R_SL,R_ext,wq_p0,n_out)
+    y_p1=conv_arr_q(x_in,R_SL,R_ext,wq_p1,n_out)
+    y_n0=conv_arr_q(x_in,R_SL,R_ext,wq_n0,n_out)
+    y_n1=conv_arr_q(x_in,R_SL,R_ext,wq_n1,n_out)
+    y=(y_p0+y_p1*16-(y_n0+y_n1*16))*15/75*1e9/255*q_max
+    return y
+# %%
+y_np=conv3_arr_sum(x_in,R_SL,R_ext)
+#%%
+y_np
+#%%
+model_load=torch.load( 'model_trained.pt')
+train_loss = 0
+train_acc = 0
+val_loss = 0
+val_acc = 0
+count = 0
+batch_size=10
+test_loader = DataLoader(test_set, batch_size = batch_size, shuffle = False)
+################################
+R_SL=0.21
+R_ext=235
+#%%
+#######################
+for inputs, labels in test_loader:
+    t1=time.time()
+    count += len(labels)
+    inputs = inputs.to(device)
+    labels = labels.to(device)
+
+    # 예측 계산
+            
+    x=model_load.conv1(inputs)
+    x=model_load.bn1(x)
+    x=model_load.relu(x)
+
+    
+    x=model_load.conv2(x)
+    
+    x=model_load.bn2(x)
+    x=model_load.relu(x)
+
+    x=model_load.maxpool(x)
+    
+    
+    #######################################################
+    #x=model_load.conv3(x)
+    x=conv3_arr_sum(x,R_SL,R_ext)
+    #######################################################
+    x=model_load.bn3(x)
+    x=model_load.relu(x)
+
+    #######################################################
+    #x=model_load.conv4(x)
+    x=conv4_arr_sum(x,R_SL,R_ext)
+    #######################################################
+    x=model_load.bn4(x)
+    x=model_load.relu(x)
+
+    x=model_load.maxpool(x)
+    
+    #######################################################
+    #x=model_load.conv5(x)
+    x=conv5_arr_sum(x,R_SL,R_ext)
+    #######################################################
+
+    x=model_load.bn5(x)
+    x=model_load.relu(x)
+
+    #######################################################
+    #x=model_load.conv6(x)
+    x=conv6_arr_sum(x,R_SL,R_ext)
+    #######################################################
+
+    x=model_load.bn6(x)
+    x=model_load.relu(x)
+
+    x=model_load.maxpool(x)
+    
+    x=model_load.flatten(x)
+
+    x=model_load.l1(x)
+    x=model_load.relu(x)
+    
+    outputs=model_load.l2(x)
+
+    # 손실 계산
+    loss = criterion(outputs, labels)
+    val_loss += loss.item()
+
+    # 예측 라벨 산출
+    predicted = torch.max(outputs, 1)[1]
+
+    # 정답 건수 산출
+    val_acc += (predicted == labels).sum().item()
+
+    # 손실과 정확도 계산
+    avg_val_loss = val_loss / count
+    avg_val_acc = val_acc / count
+    
+    print(count, (time.time()-t1)/len(labels),avg_val_acc)
+    
+print(avg_val_acc)
+
+# %%
+print(avg_val_acc)
+# %%
